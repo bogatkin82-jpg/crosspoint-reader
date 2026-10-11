@@ -567,6 +567,27 @@ size_t Calendar::occurrencesOn(int32_t day, Occurrence* out, size_t maxOut) cons
       }
     }
   }
+  // A busy-only feed (times, no SUMMARY) next to a full export of the same
+  // calendar yields each meeting twice: drop an untitled occurrence when a
+  // titled one covers the same slot (or an identical untitled one came first).
+  size_t w = 0;
+  for (size_t i = 0; i < n; i++) {
+    const Event& a = events_[out[i].event];
+    bool shadowed = false;
+    if (a.summaryPos == NO_POS) {
+      for (size_t j = 0; j < n && !shadowed; j++) {
+        if (j == i) continue;
+        const Event& b = events_[out[j].event];
+        // Titled beats untitled; identical untitled slots keep the first.
+        shadowed = (b.summaryPos != NO_POS || j < i) && out[j].startMin == out[i].startMin &&
+                   out[j].continued == out[i].continued && b.endMin == a.endMin &&
+                   b.endDay - b.startDay == a.endDay - a.startDay;
+      }
+    }
+    if (!shadowed) out[w++] = out[i];
+  }
+  n = w;
+
   // Insertion sort: all-day (-1) first, then by start minute; stable.
   for (size_t i = 1; i < n; i++) {
     const Occurrence o = out[i];

@@ -67,6 +67,11 @@ Leaving the screen restarts the device silently back into the plugin to return
 the Wi-Fi/TLS heap, like the other Wi-Fi screens. HTTPS is verified against the
 firmware CA bundle; feeds behind a VPN or a corporate login are not reachable.
 
+Busy-only feeds (times without SUMMARY) can be combined with a full export
+copied in by hand: in the agenda an untitled occurrence is hidden when a titled
+one (or an identical untitled one) occupies the same slot, so each meeting is
+listed once, with its title when one is known.
+
 Supported:
 
 * `VEVENT`: `DTSTART`/`DTEND`/`DURATION`, all-day and multi-day events,

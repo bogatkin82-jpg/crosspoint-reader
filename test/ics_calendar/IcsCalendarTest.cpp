@@ -144,3 +144,46 @@ TEST(IcsCalendar, ManyLongTitlesKeepRecentText) {
   EXPECT_TRUE(foundDemo);
   EXPECT_TRUE(foundBusy);
 }
+
+// Full export (titles) uploaded by hand + busy-only feed of the same calendar.
+TEST(IcsCalendar, BusyFeedShadowedByTitledEvents) {
+  const std::string full =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTART:20261012T100000\r\nDTEND:20261012T103000\r\n"
+      "SUMMARY:Синк\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+  const std::string busy =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x1\r\nDTSTART:20261012T100000\r\nDTEND:20261012T103000\r\n"
+      "END:VEVENT\r\nBEGIN:VEVENT\r\nUID:x2\r\nDTSTART:20261012T120000\r\nDTEND:20261012T130000\r\n"
+      "END:VEVENT\r\nEND:VCALENDAR\r\n";
+  Calendar cal;
+  cal.clear();
+  cal.begin(0);
+  cal.feed(full.data(), full.size());
+  cal.end();
+  cal.begin(1);
+  cal.feed(busy.data(), busy.size());
+  cal.end();
+  cal.finalize();
+  Occurrence occ[8];
+  const size_t n = cal.occurrencesOn(D(2026, 10, 12), occ, 8);
+  ASSERT_EQ(n, 2u);  // titled 10:00 kept, busy 10:00 hidden, new busy 12:00 shown
+  EXPECT_EQ(occ[0].startMin, 600);
+  EXPECT_NE(cal.events()[occ[0].event].summaryPos, NO_POS);
+  EXPECT_EQ(occ[1].startMin, 720);
+  EXPECT_EQ(cal.events()[occ[1].event].summaryPos, NO_POS);
+}
+
+TEST(IcsCalendar, DuplicateBusyFeedsCollapse) {
+  const std::string busy =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x1\r\nDTSTART:20261012T100000\r\nDTEND:20261012T103000\r\n"
+      "END:VEVENT\r\nEND:VCALENDAR\r\n";
+  Calendar cal;
+  cal.clear();
+  for (uint8_t f = 0; f < 2; f++) {
+    cal.begin(f);
+    cal.feed(busy.data(), busy.size());
+    cal.end();
+  }
+  cal.finalize();
+  Occurrence occ[8];
+  EXPECT_EQ(cal.occurrencesOn(D(2026, 10, 12), occ, 8), 1u);
+}
