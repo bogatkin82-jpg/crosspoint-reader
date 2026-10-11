@@ -177,6 +177,7 @@ void CalendarMonthActivity::render(RenderLock&&) {
   ics::Occurrence occ[MAX_LIST];
   const size_t n = cal.occurrencesOn(selected, occ, MAX_LIST);
   const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+  std::string summary;
   if (n == 0) {
     renderer.drawText(UI_10_FONT_ID, side, y, tr(STR_CAL_NO_EVENTS));
   }
@@ -184,7 +185,8 @@ void CalendarMonthActivity::render(RenderLock&&) {
     const ics::Event& ev = cal.events()[occ[i].event];
     std::string line = occ[i].continued || ev.startMin < 0 ? std::string(tr(STR_CAL_ALL_DAY)) : formatTime(ev.startMin);
     line += "  ";
-    line += cal.str(ev.summary);
+    data.eventText(ev, &summary, nullptr);
+    line += summary.empty() ? tr(STR_CAL_UNTITLED) : summary.c_str();
     const std::string fitted = renderer.truncatedText(UI_10_FONT_ID, line.c_str(), width - 2 * side);
     renderer.drawText(UI_10_FONT_ID, side, y, fitted.c_str());
     y += lineH;

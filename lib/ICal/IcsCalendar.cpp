@@ -9,7 +9,6 @@ namespace ics {
 namespace {
 constexpr size_t MAX_LINE = 2048;       // logical (unfolded) line cap
 constexpr size_t MAX_SUMMARY = 120;     // bytes kept per title
-constexpr size_t MAX_LOCATION = 80;     // bytes kept per location
 constexpr size_t MAX_UID = 160;         // bytes kept per todo UID
 constexpr int MAX_COUNT_SCAN = 20000;   // day steps when resolving COUNT
 constexpr int MAX_SPAN_SCAN = 62;       // longest multi-day event looked back on
@@ -114,6 +113,36 @@ void truncateUtf8(std::string& s, size_t maxBytes) {
   s.resize(cut);
 }
 
+bool extractPropertyValue(const char* buf, size_t len, std::string& out, size_t maxBytes) {
+  out.clear();
+  // Unfold the first logical line: CRLF/LF followed by space or tab continues it.
+  std::string l;
+  l.reserve(len < 512 ? len : 512);
+  for (size_t i = 0; i < len; i++) {
+    const char c = buf[i];
+    if (c == '\r') continue;
+    if (c == '\n') {
+      if (i + 1 < len && (buf[i + 1] == ' ' || buf[i + 1] == '\t')) {
+        i++;
+        continue;
+      }
+      break;
+    }
+    l.push_back(c);
+  }
+  bool quoted = false;
+  size_t colon = 0;
+  for (; colon < l.size(); colon++) {
+    if (l[colon] == '"') quoted = !quoted;
+    if (l[colon] == ':' && !quoted) break;
+  }
+  if (colon >= l.size()) return false;
+  out = l.substr(colon + 1);
+  unescapeText(out);
+  truncateUtf8(out, maxBytes);
+  return true;
+}
+
 uint32_t Calendar::hashUid(const char* s, size_t len) {
   uint32_t h = 2166136261u;  // FNV-1a
   for (size_t i = 0; i < len; i++) {
@@ -137,6 +166,8 @@ void Calendar::clear() {
 void Calendar::begin(uint8_t idx) {
   if (arena.empty()) arena.assign(1, '\0');
   fileIndex = idx;
+  streamPos = 0;
+  linePos = 0;
   line.clear();
   line.reserve(256);
   lineOverflow = false;
@@ -160,7 +191,9 @@ void Calendar::feed(const char* data, size_t len) {
       if (lineStarted) onLine();
       line.clear();
       lineOverflow = false;
+      linePos = streamPos + static_cast<uint32_t>(i);
     }
+    if (!lineStarted) linePos = streamPos + static_cast<uint32_t>(i);
     lineStarted = true;
     if (line.size() < MAX_LINE) {
       line.push_back(c);
@@ -168,6 +201,7 @@ void Calendar::feed(const char* data, size_t len) {
       lineOverflow = true;
     }
   }
+  streamPos += static_cast<uint32_t>(len);
 }
 
 void Calendar::end() {
@@ -249,10 +283,9 @@ void Calendar::onProperty(const std::string& name, const std::string& params, co
     cur.summary = value;
     unescapeText(cur.summary);
     truncateUtf8(cur.summary, MAX_SUMMARY);
+    cur.summaryPos = linePos;
   } else if (name == "LOCATION") {
-    cur.location = value;
-    unescapeText(cur.location);
-    truncateUtf8(cur.location, MAX_LOCATION);
+    cur.locationPos = linePos;
   } else if (name == "UID") {
     cur.uid = value;
   } else if (name == "RRULE") {
@@ -399,19 +432,26 @@ void Calendar::commitEvent() {
   // An overridden instance hides the matching occurrence of its master series.
   if (cur.recurrenceId.valid()) exdates_.push_back({ev.uidHash, toLocalDt(cur.recurrenceId).day});
 
+  // Resolve COUNT now so finished series are dropped before they take a slot.
+  if (ev.freq != Freq::None && ev.count > 0) {
+    resolveCount(ev);
+    ev.count = 0;
+  }
   if (ev.freq == Freq::None) {
     if (limits.windowStart != NO_DAY && ev.endDay < limits.windowStart) return;
     if (limits.windowEnd != NO_DAY && ev.startDay > limits.windowEnd) return;
   } else {
     if (limits.windowEnd != NO_DAY && ev.startDay > limits.windowEnd) return;
-    if (limits.windowStart != NO_DAY && ev.untilDay != NO_DAY && ev.untilDay < limits.windowStart) return;
+    if (limits.windowStart != NO_DAY && ev.untilDay != NO_DAY &&
+        ev.untilDay + (ev.endDay - ev.startDay) < limits.windowStart)
+      return;
   }
   if (events_.size() >= limits.maxEvents) {
     truncated_ = true;
     return;
   }
-  ev.summary = addString(cur.summary, MAX_SUMMARY);
-  ev.location = addString(cur.location, MAX_LOCATION);
+  ev.summaryPos = cur.summaryPos;
+  ev.locationPos = cur.locationPos;
   for (const int32_t d : cur.exdates) exdates_.push_back({ev.uidHash, d});
   events_.push_back(ev);
 }

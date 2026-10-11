@@ -606,3 +606,4 @@ STR_CAL_SYNC_NO_URL: "Нет ссылки: добавьте \"url\" в plugin.js
 STR_CAL_SYNC_LOW_MEMORY: "Недостаточно памяти для HTTPS"
 STR_CAL_LAST_SYNC: "Обновлено"
 STR_CAL_NEVER: "ни разу"
+STR_CAL_UNTITLED: "(без названия)"

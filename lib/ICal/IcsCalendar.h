@@ -13,14 +13,19 @@
 // window are dropped while parsing to bound RAM on the ESP32-C3.
 namespace ics {
 
+constexpr uint32_t NO_POS = UINT32_MAX;
+
 enum class Freq : uint8_t { None, Daily, Weekly, Monthly, Yearly };
 
 struct Event {
   int32_t startDay = NO_DAY;
   int32_t endDay = NO_DAY;  // last day the event covers (inclusive)
   int32_t untilDay = NO_DAY;
-  uint32_t summary = 0;
-  uint32_t location = 0;
+  // Event titles are not kept in RAM (a work calendar holds hundreds of them):
+  // these are byte offsets of the SUMMARY / LOCATION lines in the source file,
+  // read back with extractPropertyValue() only for rows on screen.
+  uint32_t summaryPos = NO_POS;
+  uint32_t locationPos = NO_POS;
   uint32_t uidHash = 0;
   int16_t startMin = -1;  // -1 = all-day
   int16_t endMin = -1;
@@ -104,7 +109,8 @@ class Calendar {
   struct Pending {
     DateTime start, end, due, recurrenceId, until;
     int32_t durationMin = -1;
-    std::string summary, location, uid;
+    std::string summary, uid;
+    uint32_t summaryPos = NO_POS, locationPos = NO_POS;
     std::vector<int32_t> exdates;
     Freq freq = Freq::None;
     uint16_t count = 0;
@@ -138,7 +144,8 @@ class Calendar {
   // line assembly
   std::string line;
   bool lineOverflow = false;
-  bool pendingCR = false;
+  uint32_t streamPos = 0;  // bytes fed since begin()
+  uint32_t linePos = 0;    // offset where the current logical line starts
   bool lineStarted = false;
   bool continuation = false;
   uint8_t fileIndex = 0;
@@ -146,6 +153,11 @@ class Calendar {
   int depth = 0;  // nesting below the current VEVENT/VTODO (VALARM etc.)
   Pending cur;
 };
+
+// Parses the logical line starting at buf (as read from Event::summaryPos):
+// unfolds continuation lines, skips NAME;PARAMS:, unescapes the value and
+// truncates it to maxBytes. False if no complete "NAME...:" header is found.
+bool extractPropertyValue(const char* buf, size_t len, std::string& out, size_t maxBytes = 160);
 
 // Unescapes TEXT values (\n \, \; \\) in place.
 void unescapeText(std::string& s);

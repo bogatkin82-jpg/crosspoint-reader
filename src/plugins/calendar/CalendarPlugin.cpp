@@ -120,7 +120,46 @@ int64_t nowUtcEpoch() {
   return static_cast<int64_t>(mktime(&t));  // mktime inverts localtime_r under the active TZ
 }
 
+void CalendarData::closeReader() {
+  if (reader.isOpen()) reader.close();
+  readerFile = -1;
+}
+
+bool CalendarData::readValue(uint8_t file, uint32_t pos, std::string& out) {
+  constexpr size_t TEXT_READ = 640;  // a folded SUMMARY of ~160 bytes fits easily
+  out.clear();
+  if (pos == ics::NO_POS || file >= paths.size()) return false;
+  if (!readBuf) {
+    readBuf = makeUniqueNoThrow<char[]>(TEXT_READ);
+    if (!readBuf) {
+      LOG_ERR("CAL", "OOM: text buffer");
+      return false;
+    }
+  }
+  if (readerFile != file) {
+    closeReader();
+    if (!Storage.openFileForRead("CAL", paths[file], reader)) return false;
+    readerFile = file;
+  }
+  if (!reader.seek(pos)) return false;
+  const int n = reader.read(readBuf.get(), TEXT_READ);
+  if (n <= 0) return false;
+  return ics::extractPropertyValue(readBuf.get(), static_cast<size_t>(n), out);
+}
+
+void CalendarData::eventText(const ics::Event& ev, std::string* summary, std::string* location) {
+  if (summary) readValue(ev.file, ev.summaryPos, *summary);
+  if (location) readValue(ev.file, ev.locationPos, *location);
+}
+
+bool CalendarData::fileHasEvents(uint8_t file) const {
+  for (const auto& ev : cal.events())
+    if (ev.file == file) return true;
+  return false;
+}
+
 bool CalendarData::load(const Manifest& manifest, int32_t today) {
+  closeReader();
   if (&manifest != &manifestCopy) manifestCopy = manifest;
   today_ = today;
   paths.clear();
@@ -184,7 +223,7 @@ bool CalendarData::load(const Manifest& manifest, int32_t today) {
   cal.clear();
   cal.setUtcConverter(&utcToLocal);
   ics::Calendar::Limits limits;
-  limits.maxEvents = 300;
+  limits.maxEvents = 500;  // 44 B each; titles stay on the SD card
   limits.maxTodos = 300;
   limits.maxArena = 20 * 1024;
   limits.windowStart = today - 31;
@@ -219,6 +258,7 @@ bool CalendarData::parseFile(const std::string& path, uint8_t index) {
 }
 
 bool CalendarData::rewrite(const std::string& path, const char* uid, ics::TodoEdit edit) {
+  closeReader();
   const std::string tmp = path + ".tmp";
   const std::string bak = path + ".bak";
   char stamp[20];
@@ -264,8 +304,12 @@ CalendarData::EditResult CalendarData::setTodoDone(size_t todoIndex, bool done) 
   if (!rewrite(paths[t.file], uidCopy.c_str(), done ? ics::TodoEdit::SetCompleted : ics::TodoEdit::SetIncomplete)) {
     return EditResult::Failed;
   }
-  cal.setTodoCompleted(todoIndex, done);
-  cal.sortTodos();
+  if (fileHasEvents(t.file)) {
+    load(manifestCopy, today_);  // event offsets in this file moved
+  } else {
+    cal.setTodoCompleted(todoIndex, done);
+    cal.sortTodos();
+  }
   return EditResult::Ok;
 }
 
@@ -275,13 +319,19 @@ CalendarData::EditResult CalendarData::deleteTodo(size_t todoIndex) {
   const char* uid = cal.str(t.uid);
   if (!*uid || t.file >= paths.size()) return EditResult::ReadOnly;
   const std::string uidCopy = uid;
-  if (!rewrite(paths[t.file], uidCopy.c_str(), ics::TodoEdit::Delete)) return EditResult::Failed;
-  cal.removeTodo(todoIndex);
+  const uint8_t file = t.file;
+  if (!rewrite(paths[file], uidCopy.c_str(), ics::TodoEdit::Delete)) return EditResult::Failed;
+  if (fileHasEvents(file)) {
+    load(manifestCopy, today_);
+  } else {
+    cal.removeTodo(todoIndex);
+  }
   return EditResult::Ok;
 }
 
 bool CalendarData::addTodo(const std::string& summary, int32_t dueDay) {
   if (summary.empty()) return false;
+  closeReader();
   const int64_t now = nowUtcEpoch();
   char uid[64];
   snprintf(uid, sizeof(uid), "%lld-%08lx@crosspoint", static_cast<long long>(now),

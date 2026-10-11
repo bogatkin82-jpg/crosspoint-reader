@@ -199,11 +199,16 @@ void CalendarActivity::buildAgendaRows() {
         t.subtitle += tr(STR_CAL_NEVER);
       }
     }
+    if (cal.truncated()) {
+      if (!t.subtitle.empty()) t.subtitle += ". ";
+      t.subtitle += tr(STR_CAL_TRUNCATED);
+    }
     rows.push_back({RowKind::Period, 0, periodStart});
     texts.push_back(std::move(t));
   }
 
   ics::Occurrence occ[MAX_OCC_PER_DAY];
+  std::string summary, location;
   bool any = false;
   for (int i = 0; i < days && rows.size() < MAX_AGENDA_ROWS; i++) {
     const int32_t day = periodStart + i;
@@ -212,8 +217,8 @@ void CalendarActivity::buildAgendaRows() {
       const ics::Event& ev = cal.events()[occ[k].event];
       RowText t;
       if (k == 0) t.heading = formatDayHeading(day, today);
-      t.label = *cal.str(ev.summary) ? cal.str(ev.summary) : "-";
-      const char* location = cal.str(ev.location);
+      data->eventText(ev, &summary, &location);
+      t.label = summary.empty() ? tr(STR_CAL_UNTITLED) : summary;
       if (occ[k].continued || ev.startMin < 0) {
         t.value = tr(STR_CAL_ALL_DAY);
         t.subtitle = location;
@@ -221,7 +226,7 @@ void CalendarActivity::buildAgendaRows() {
         t.value = formatTime(ev.startMin);
         if (ev.endMin >= 0 && (ev.endMin != ev.startMin || ev.endDay != ev.startDay)) {
           t.subtitle = formatTime(ev.startMin) + " - " + formatTime(ev.endMin);
-          if (*location) t.subtitle += ", ";
+          if (!location.empty()) t.subtitle += ", ";
         }
         t.subtitle += location;
       }
@@ -520,8 +525,7 @@ void CalendarActivity::startSync() {
 
 void CalendarActivity::openMonthView() {
   monthPick = periodStart;
-  auto month = makeUniqueNoThrow<CalendarMonthActivity>(renderer, mappedInput, data->calendar(), today, periodStart,
-                                                        &monthPick);
+  auto month = makeUniqueNoThrow<CalendarMonthActivity>(renderer, mappedInput, *data, today, periodStart, &monthPick);
   if (!month) {
     LOG_ERR("CAL", "OOM: month view");
     return;
@@ -534,7 +538,9 @@ void CalendarActivity::openMonthView() {
 void CalendarActivity::showEventDetails(const RowRef& row) {
   const ics::Calendar& cal = data->calendar();
   const ics::Event& ev = cal.events()[row.index];
-  std::string text = cal.str(ev.summary);
+  std::string summary, location;
+  data->eventText(ev, &summary, &location);
+  std::string text = summary.empty() ? std::string(tr(STR_CAL_UNTITLED)) : summary;
   text += "\n";
   text += formatDayHeading(row.day, today);
   if (ev.startMin >= 0) {
@@ -544,9 +550,9 @@ void CalendarActivity::showEventDetails(const RowRef& row) {
   } else if (ev.endDay != ev.startDay) {
     text += " - " + formatShortDate(row.day + (ev.endDay - ev.startDay));
   }
-  if (*cal.str(ev.location)) {
+  if (!location.empty()) {
     text += "\n";
-    text += cal.str(ev.location);
+    text += location;
   }
   const char* options[] = {tr(STR_BACK)};
   popup.show(tr(STR_CAL_EVENT), text.c_str(), options, 1, 0, [](int) {});

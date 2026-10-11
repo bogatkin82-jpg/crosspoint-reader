@@ -3,6 +3,9 @@
 #include <IcsCalendar.h>
 #include <IcsEditor.h>
 
+#include <HalStorage.h>
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,8 +56,15 @@ class CalendarData {
   int autoSyncHours() const { return autoSyncHours_; }
   size_t fileCount() const { return paths.size(); }
 
+  // Reads an event's title / location back from its .ics file (empty when the
+  // property is absent). Keeps the last file open between calls.
+  void eventText(const ics::Event& ev, std::string* summary, std::string* location);
+
   // Frees the parsed calendar (reload() restores it).
-  void releaseMemory() { cal = ics::Calendar{}; }
+  void releaseMemory() {
+    closeReader();
+    cal = ics::Calendar{};
+  }
 
   EditResult setTodoDone(size_t todoIndex, bool done);
   EditResult deleteTodo(size_t todoIndex);
@@ -63,6 +73,9 @@ class CalendarData {
 
  private:
   bool parseFile(const std::string& path, uint8_t index);
+  bool readValue(uint8_t file, uint32_t pos, std::string& out);
+  void closeReader();
+  bool fileHasEvents(uint8_t file) const;
   bool rewrite(const std::string& path, const char* uid, ics::TodoEdit edit);
 
   ics::Calendar cal;
@@ -73,6 +86,9 @@ class CalendarData {
   int daysAhead_ = 30;
   int autoSyncHours_ = 0;
   std::vector<Subscription> subs;
+  HalFile reader;
+  int readerFile = -1;
+  std::unique_ptr<char[]> readBuf;
 };
 
 }  // namespace plugins::calendar

@@ -2,6 +2,8 @@
 
 #include <IcsCalendar.h>
 
+#include "CalendarPlugin.h"
+
 #include "activities/Activity.h"
 
 namespace plugins::calendar {
@@ -12,10 +14,11 @@ namespace plugins::calendar {
 // selected day through *pickedDay; Back cancels.
 class CalendarMonthActivity final : public Activity {
  public:
-  CalendarMonthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const ics::Calendar& calendar,
-                        int32_t today, int32_t initialDay, int32_t* pickedDay)
+  CalendarMonthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, CalendarData& data, int32_t today,
+                        int32_t initialDay, int32_t* pickedDay)
       : Activity("CalendarMonth", renderer, mappedInput),
-        cal(calendar),
+        data(data),
+        cal(data.calendar()),
         today(today),
         selected(initialDay),
         pickedDay(pickedDay) {}
@@ -33,6 +36,7 @@ class CalendarMonthActivity final : public Activity {
   void moveMonths(int delta);
   void pick();
 
+  CalendarData& data;
   const ics::Calendar& cal;
   const int32_t today;
   int32_t selected;

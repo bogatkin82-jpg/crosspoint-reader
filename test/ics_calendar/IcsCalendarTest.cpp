@@ -11,6 +11,7 @@ struct StrSrc : Source { std::string s; size_t p=0; explicit StrSrc(std::string 
 struct StrSink : Sink { std::string s; bool write(const char*d,size_t n) override { s.append(d,n); return true; } };
 #define CHECK(c) EXPECT_TRUE(c)
 int32_t D(int y,int m,int d){ return daysFromCivil(y,m,d); }
+static std::string textAt(const std::string& src, uint32_t pos){ std::string out; if(pos==NO_POS) return out; extractPropertyValue(src.data()+pos, std::min<size_t>(600, src.size()-pos), out); return out; }
 void moscow(int64_t e,int32_t&day,int16_t&min){ utcIdentity(e+3*3600,day,min); }
 
 TEST(IcsCalendar, ParseExpandAndEdit) {
@@ -43,14 +44,14 @@ TEST(IcsCalendar, ParseExpandAndEdit) {
   Occurrence occ[16];
   size_t n=cal.occurrencesOn(D(2026,10,12),occ,16);
   CHECK(n==2); // 10:00 MSK meeting, moved (15:00); weekly instance excluded
-  CHECK(n>=2 && occ[0].startMin==600 && strcmp(cal.str(cal.events()[occ[0].event].summary),"Встреча, важная")==0);
+  CHECK(n>=2 && occ[0].startMin==600 && textAt(s, cal.events()[occ[0].event].summaryPos)=="Встреча, важная");
   CHECK(n>=2 && occ[1].startMin==900);
   CHECK(!cal.hasEventsOn(D(2026,10,7)));  // exdate
   CHECK(cal.hasEventsOn(D(2026,10,5)) && cal.hasEventsOn(D(2026,10,14)));
   // COUNT=6 on MO,WE from Oct 5: 5,7,12,14,19,21 -> 21st last
   CHECK(cal.hasEventsOn(D(2026,10,21))); CHECK(!cal.hasEventsOn(D(2026,10,26)));
   n=cal.occurrencesOn(D(2026,10,5),occ,16);
-  CHECK(n==1 && std::string(cal.str(cal.events()[occ[0].event].summary)).find("строк по")!=std::string::npos);
+  CHECK(n==1 && textAt(s, cal.events()[occ[0].event].summaryPos).find("строк по")!=std::string::npos);
   // all-day multi day 20..22
   CHECK(cal.hasEventsOn(D(2026,10,22))); CHECK(!cal.hasEventsOn(D(2026,10,23)));
   n=cal.occurrencesOn(D(2026,10,21),occ,16); bool cont=false; for(size_t i=0;i<n;i++) if(occ[i].continued) cont=true; CHECK(cont);
@@ -96,4 +97,50 @@ TEST(IcsCalendar, ParseExpandAndEdit) {
   { const char* lf="BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261011T090000\nSUMMARY:lf\nEND:VEVENT\nEND:VCALENDAR"; Calendar c; c.clear(); c.begin(0); c.feed(lf,strlen(lf)); c.end(); c.finalize(); CHECK(c.events().size()==1); }
   // limits
   { Calendar c; c.clear(); Calendar::Limits l; l.maxEvents=2; c.setLimits(l); c.begin(0); c.feed(ics,strlen(ics)); c.end(); c.finalize(); CHECK(c.truncated()); CHECK(c.events().size()<=2); }
+  // Location is read back from the file as well.
+  { n=cal.occurrencesOn(D(2026,10,12),occ,16); CHECK(n>=1 && textAt(s, cal.events()[occ[0].event].locationPos)=="Офис"); }
+}
+
+// A large work calendar: hundreds of old recurring meetings with long titles
+// precede today's events. Titles must not depend on an in-RAM budget.
+TEST(IcsCalendar, ManyLongTitlesKeepRecentText) {
+  std::string src = "BEGIN:VCALENDAR\r\n";
+  for (int i = 0; i < 280; i++) {
+    char buf[400];
+    snprintf(buf, sizeof(buf),
+             "BEGIN:VEVENT\r\nUID:old-%d\r\nDTSTART:2025%02d%02dT090000\r\nRRULE:FREQ=WEEKLY\r\n"
+             "SUMMARY:Очень длинное название регулярной встречи команды номер %d с обсуждением планов\r\n"
+             "LOCATION:Москва, БЦ Морозов, переговорная Красная площадь %d\r\nEND:VEVENT\r\n",
+             i, 1 + i % 12, 1 + i % 28, i, i);
+    src += buf;
+  }
+  src += "BEGIN:VEVENT\r\nUID:today\r\nDTSTART:20261012T143000\r\nDTEND:20261012T150000\r\n"
+         "SUMMARY;LANGUAGE=ru:Демо прототипа\r\nEND:VEVENT\r\n"
+         "BEGIN:VEVENT\r\nUID:busy\r\nDTSTART:20261012T160000\r\nDTEND:20261012T170000\r\nEND:VEVENT\r\n"
+         "BEGIN:VEVENT\r\nUID:done\r\nDTSTART:20250101T100000\r\nRRULE:FREQ=DAILY;COUNT=5\r\nSUMMARY:x\r\nEND:VEVENT\r\n"
+         "END:VCALENDAR\r\n";
+  Calendar cal;
+  cal.clear();
+  Calendar::Limits lim;
+  lim.maxEvents = 500;
+  lim.maxArena = 20 * 1024;
+  lim.windowStart = D(2026, 9, 11);
+  lim.windowEnd = D(2027, 11, 15);
+  cal.setLimits(lim);
+  cal.begin(0);
+  cal.feed(src.data(), src.size());
+  cal.end();
+  cal.finalize();
+  EXPECT_FALSE(cal.truncated());
+  EXPECT_EQ(cal.events().size(), 282u);  // finished COUNT series dropped
+  Occurrence occ[64];
+  const size_t n = cal.occurrencesOn(D(2026, 10, 12), occ, 64);
+  bool foundDemo = false, foundBusy = false;
+  for (size_t i = 0; i < n; i++) {
+    const Event& ev = cal.events()[occ[i].event];
+    if (occ[i].startMin == 870) foundDemo = textAt(src, ev.summaryPos) == "Демо прототипа";
+    if (occ[i].startMin == 960) foundBusy = ev.summaryPos == NO_POS;
+  }
+  EXPECT_TRUE(foundDemo);
+  EXPECT_TRUE(foundBusy);
 }
