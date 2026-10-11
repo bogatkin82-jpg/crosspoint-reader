@@ -87,3 +87,9 @@ Limits (RAM): 300 events within [today − 31 days, today + 400 days], 300 tasks
 `TZID=` parameters are treated as the device's local time zone.
 
 Times need the RTC (X3) set: Settings → clock sync.
+
+### Feeds only reachable from a computer
+
+`tools/calendar-sync/` holds a small macOS launchd job that downloads such a
+feed (VPN, corporate network) and uploads it to the reader over WebDAV while
+the reader is in File Transfer mode. See its README.
