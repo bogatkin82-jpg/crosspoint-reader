@@ -101,6 +101,19 @@ bool localToday(int32_t& day) {
   return false;
 }
 
+int64_t readLastSync(const std::string& dir) {
+  const std::string path = dir + "/.lastsync";
+  if (!Storage.exists(path.c_str())) return 0;
+  const String s = Storage.readFile(path.c_str());
+  return static_cast<int64_t>(atoll(s.c_str()));
+}
+
+void writeLastSync(const std::string& dir, int64_t epoch) {
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(epoch));
+  Storage.writeFile((dir + "/.lastsync").c_str(), String(buf));
+}
+
 int64_t nowUtcEpoch() {
   struct tm t {};
   if (!halClock.isAvailable() || !halClock.localTime(t) || !clockLooksSet(t)) return 0;
@@ -120,6 +133,25 @@ bool CalendarData::load(const Manifest& manifest, int32_t today) {
   daysAhead_ = days < 7 ? 7 : (days > 120 ? 120 : days);
   const char* tasks = config["tasksFile"] | "tasks.ics";
   tasksPath = resolvePath(manifest.dir, tasks);
+  const int autoHours = config["autoSyncHours"] | 0;
+  autoSyncHours_ = autoHours < 0 ? 0 : autoHours;
+
+  subs.clear();
+  if (config["url"].is<const char*>()) {
+    const char* file = config["file"] | "subscription.ics";
+    subs.push_back({config["url"].as<const char*>(), resolvePath(manifest.dir, *file ? file : "subscription.ics")});
+  }
+  if (config["subscriptions"].is<JsonArrayConst>()) {
+    int n = 0;
+    for (JsonObjectConst s : config["subscriptions"].as<JsonArrayConst>()) {
+      const char* url = s["url"] | "";
+      if (!*url || subs.size() >= 8) continue;
+      char def[32];
+      snprintf(def, sizeof(def), "subscription-%d.ics", ++n);
+      const char* file = s["file"] | def;
+      subs.push_back({url, resolvePath(manifest.dir, *file ? file : def)});
+    }
+  }
 
   if (config["files"].is<JsonArrayConst>()) {
     for (JsonVariantConst f : config["files"].as<JsonArrayConst>()) {
@@ -137,6 +169,12 @@ bool CalendarData::load(const Manifest& manifest, int32_t today) {
         paths.push_back(manifest.dir + "/" + name);
       }
     }
+  }
+  // Downloaded feeds are always shown, even with an explicit "files" list.
+  for (const auto& s : subs) {
+    bool listed = false;
+    for (const auto& p : paths) listed |= p == s.path;
+    if (!listed && Storage.exists(s.path.c_str()) && paths.size() < MAX_FILES) paths.push_back(s.path);
   }
   // Make sure the tasks file is editable even when listed implicitly.
   bool tasksListed = false;

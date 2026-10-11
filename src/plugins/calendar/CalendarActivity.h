@@ -63,6 +63,7 @@ class CalendarActivity final : public UiTabListActivity {
   void deleteTask(int todoIndex);
   void startAddTask();
   void openMonthView();
+  void startSync();
   void showMessage(const char* text);
   void setPeriodStart(int32_t day);
 
@@ -74,7 +75,9 @@ class CalendarActivity final : public UiTabListActivity {
   int32_t periodStart = 0;
   int32_t monthPick = 0;  // written by the month view
   bool clockSet = false;
-  bool showDone = false;  // completed tasks hidden by default (exports carry many)
+  bool showDone = false;
+  bool autoSyncPending = false;
+  int64_t lastSync = 0;  // completed tasks hidden by default (exports carry many)
 
   std::vector<RowRef> rows;
   std::vector<RowText> texts;

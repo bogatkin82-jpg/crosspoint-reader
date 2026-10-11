@@ -7,8 +7,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <ctime>
 
 #include "CalendarMonthActivity.h"
+#include "CalendarSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -94,6 +96,11 @@ void CalendarActivity::onEnter() {
   }
   reload();
   for (auto& n : tabNavs) n.selected = 1;
+
+  const int hours = data->autoSyncHours();
+  const int64_t now = nowUtcEpoch();
+  autoSyncPending = hours > 0 && !data->subscriptions().empty() && now > 0 &&
+                    now - lastSync >= static_cast<int64_t>(hours) * 3600;
 }
 
 void CalendarActivity::onExit() {
@@ -109,6 +116,7 @@ void CalendarActivity::reload() {
   RenderLock lock;
   GUI.drawPopup(renderer, tr(STR_CAL_LOADING));
   data->load(manifest, today);
+  lastSync = readLastSync(manifest.dir);
   rebuildRowsLocked();
 }
 
@@ -173,7 +181,24 @@ void CalendarActivity::buildAgendaRows() {
     RowText t;
     t.label = formatShortDate(periodStart) + " - " + formatShortDate(periodStart + days - 1);
     t.value = tr(STR_CAL_GO_TO);
-    if (!clockSet) t.subtitle = tr(STR_CAL_CLOCK_NOT_SET);
+    if (!clockSet) {
+      t.subtitle = tr(STR_CAL_CLOCK_NOT_SET);
+    } else if (!data->subscriptions().empty()) {
+      t.subtitle = tr(STR_CAL_LAST_SYNC);
+      t.subtitle += ": ";
+      if (lastSync > 0) {
+        int32_t d;
+        int16_t m;
+        const time_t ts = static_cast<time_t>(lastSync);
+        struct tm lt {};
+        localtime_r(&ts, &lt);
+        d = ics::daysFromCivil(lt.tm_year + 1900, static_cast<unsigned>(lt.tm_mon + 1), static_cast<unsigned>(lt.tm_mday));
+        m = static_cast<int16_t>(lt.tm_hour * 60 + lt.tm_min);
+        t.subtitle += formatShortDate(d) + ", " + formatTime(m);
+      } else {
+        t.subtitle += tr(STR_CAL_NEVER);
+      }
+    }
     rows.push_back({RowKind::Period, 0, periodStart});
     texts.push_back(std::move(t));
   }
@@ -345,6 +370,11 @@ void CalendarActivity::render(RenderLock&& lock) {
 }
 
 bool CalendarActivity::handleCustomInput() {
+  if (autoSyncPending && !popup.isActive()) {
+    autoSyncPending = false;
+    startSync();
+    return true;
+  }
   if (deferredMessage && !popup.isActive()) {
     const char* options[] = {tr(STR_BACK)};
     popup.show(manifest.name.c_str(), deferredMessage, options, 1, 0, [](int) {});
@@ -414,8 +444,9 @@ void CalendarActivity::onRowLongPress(const int index) {
 
 void CalendarActivity::showPeriodMenu() {
   const char* options[] = {tr(STR_CAL_TODAY),      tr(STR_CAL_MONTH_VIEW), tr(STR_CAL_PREV_WEEK), tr(STR_CAL_NEXT_WEEK),
-                           tr(STR_CAL_PREV_MONTH), tr(STR_CAL_NEXT_MONTH), tr(STR_CAL_RELOAD)};
-  popup.show(tr(STR_CAL_GO_TO), options, 7, 0, [this](int idx) {
+                           tr(STR_CAL_PREV_MONTH), tr(STR_CAL_NEXT_MONTH), tr(STR_CAL_RELOAD),  tr(STR_CAL_SYNC)};
+  const int count = data->subscriptions().empty() ? 7 : 8;
+  popup.show(tr(STR_CAL_GO_TO), options, count, 0, [this](int idx) {
     int y;
     unsigned m, d;
     switch (idx) {
@@ -452,11 +483,39 @@ void CalendarActivity::showPeriodMenu() {
         reload();
         requestUpdate();
         break;
+      case 7:
+        startSync();
+        break;
       default:
         break;
     }
   });
   requestUpdate();
+}
+
+void CalendarActivity::startSync() {
+  std::vector<Subscription> subs = data->subscriptions();
+  if (subs.empty()) {
+    showMessage(tr(STR_CAL_SYNC_NO_URL));
+    return;
+  }
+  auto sync = makeUniqueNoThrow<CalendarSyncActivity>(renderer, mappedInput, manifest, std::move(subs));
+  if (!sync) {
+    LOG_ERR("CAL", "OOM: sync activity");
+    return;
+  }
+  // TLS needs ~40 KB of contiguous heap: drop the parsed calendar while syncing.
+  {
+    RenderLock lock;
+    rows.clear();
+    texts.clear();
+    rowItems.clear();
+    data->releaseMemory();
+  }
+  startActivityForResult(std::move(sync), [this](const ActivityResult&) {
+    clockSet = localToday(today);
+    reload();
+  });
 }
 
 void CalendarActivity::openMonthView() {

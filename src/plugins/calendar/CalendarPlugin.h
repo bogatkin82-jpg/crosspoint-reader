@@ -16,7 +16,20 @@
 //                                default: every *.ics in the folder
 //   "tasksFile": "tasks.ics"     where new tasks are written
 //   "daysAhead": 30              length of the agenda period (7..120)
+//   "url": "https://..."         internet calendar (iCal feed) to download
+//                                into "subscription.ics"; or a list:
+//   "subscriptions": [{"url": "...", "file": "work.ics"}, ...]
+//   "autoSyncHours": 0           sync on open when older than N hours (0 = off)
 namespace plugins::calendar {
+
+struct Subscription {
+  std::string url;
+  std::string path;  // absolute destination on the SD card
+};
+
+// Last successful sync time (UTC epoch) kept in <dir>/.lastsync; 0 if never.
+int64_t readLastSync(const std::string& dir);
+void writeLastSync(const std::string& dir, int64_t epoch);
 
 extern const Runtime RUNTIME;
 
@@ -36,7 +49,12 @@ class CalendarData {
 
   const ics::Calendar& calendar() const { return cal; }
   int daysAhead() const { return daysAhead_; }
+  const std::vector<Subscription>& subscriptions() const { return subs; }
+  int autoSyncHours() const { return autoSyncHours_; }
   size_t fileCount() const { return paths.size(); }
+
+  // Frees the parsed calendar (reload() restores it).
+  void releaseMemory() { cal = ics::Calendar{}; }
 
   EditResult setTodoDone(size_t todoIndex, bool done);
   EditResult deleteTodo(size_t todoIndex);
@@ -53,6 +71,8 @@ class CalendarData {
   Manifest manifestCopy;
   int32_t today_ = 0;
   int daysAhead_ = 30;
+  int autoSyncHours_ = 0;
+  std::vector<Subscription> subs;
 };
 
 }  // namespace plugins::calendar

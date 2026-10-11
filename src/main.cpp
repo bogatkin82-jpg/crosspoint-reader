@@ -39,6 +39,8 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
+#include "activities/Activity.h"
+#include "plugins/PluginRegistry.h"
 
 #if CROSSPOINT_VECTOR_FONTS
 // Rendering (incl. FreeType TTF rasterization) runs on the Arduino loop task.
@@ -141,7 +143,9 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
-constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_SETTINGS;
+constexpr uint32_t SILENT_REBOOT_TARGET_PLUGIN = 3;
+constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_PLUGIN;
+constexpr const char* PLUGIN_RESUME_PATH = "/.crosspoint/plugin_resume";
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // How the device is coming back to life, resolved once at boot. Both resume
@@ -194,6 +198,30 @@ void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME, "home"); }
 void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER, "reader"); }
 
 void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS, "settings"); }
+
+void silentRestartToPlugin(const char* pluginDir) {
+  if (deepSleepInProgress) return;
+  if (!pluginDir || !Storage.writeFile(PLUGIN_RESUME_PATH, String(pluginDir))) {
+    silentRestart();
+    return;
+  }
+  silentRestartTo(SILENT_REBOOT_TARGET_PLUGIN, "plugin");
+}
+
+// Opens the plugin recorded by silentRestartToPlugin(); false falls back to home.
+static bool resumePluginAfterSilentRestart() {
+  if (!Storage.exists(PLUGIN_RESUME_PATH)) return false;
+  const String dir = Storage.readFile(PLUGIN_RESUME_PATH);
+  Storage.remove(PLUGIN_RESUME_PATH);
+  plugins::Manifest manifest;
+  if (dir.length() == 0 || !plugins::loadManifest(dir.c_str(), manifest) || !manifest.enabled) return false;
+  const plugins::Runtime* runtime = plugins::findRuntime(manifest.runtime);
+  if (!runtime) return false;
+  auto activity = runtime->create(renderer, mappedInputManager, manifest);
+  if (!activity) return false;
+  activityManager.replaceActivity(std::move(activity));
+  return true;
+}
 
 void restartToHomeAfterStorageHandoff() {
   if (deepSleepInProgress) return;  // sleeping supersedes the storage handoff reboot
@@ -539,6 +567,9 @@ void setup() {
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_PLUGIN &&
+             resumePluginAfterSilentRestart()) {
+    // Back on the plugin that brought Wi-Fi up (e.g. after a calendar sync).
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_SETTINGS) {
     // Back out of the WiFi rows and the user is where they left off, not on Home.
     activityManager.goToSettings();

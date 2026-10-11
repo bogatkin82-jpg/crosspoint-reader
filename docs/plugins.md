@@ -53,6 +53,19 @@ Reads every `*.ics` file in the plugin folder (or the list in `config.files`).
 | `files`     | all `*.ics`   | paths relative to the folder, or absolute (`/Cal/x.ics`) |
 | `tasksFile` | `tasks.ics`   | file new tasks are appended to                        |
 | `daysAhead` | `30`          | agenda period length, 7..120                          |
+| `url`       | —             | internet calendar (iCal feed) saved as `file` (default `subscription.ics`) |
+| `subscriptions` | —         | list of `{"url": ..., "file": ...}` feeds              |
+| `autoSyncHours` | `0`       | sync automatically on open when older than N hours (0 = manual) |
+
+### Internet calendars
+
+Period row → **Sync** connects to Wi-Fi (saved networks or the picker), syncs
+the clock over NTP, downloads every feed to `<file>.part`, rejects responses
+that are not a `VCALENDAR` (SSO/login pages) and swaps the file in, keeping the
+old copy on failure. The last success time is stored in `<folder>/.lastsync`.
+Leaving the screen restarts the device silently back into the plugin to return
+the Wi-Fi/TLS heap, like the other Wi-Fi screens. HTTPS is verified against the
+firmware CA bundle; feeds behind a VPN or a corporate login are not reachable.
 
 Supported:
 

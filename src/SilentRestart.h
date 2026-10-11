@@ -10,6 +10,8 @@
 void silentRestart();            // home screen
 void silentRestartToReader();    // currently-open EPUB (APP_STATE.openEpubPath)
 void silentRestartToSettings();  // settings screen
+// Reopens the plugin in `pluginDir` (/plugins/<folder>) after the reboot.
+void silentRestartToPlugin(const char* pluginDir);
 
 // Reboots immediately after an activity releases exclusive raw storage. The
 // RTC target ensures setup() lands on Home instead of resuming a reader.
