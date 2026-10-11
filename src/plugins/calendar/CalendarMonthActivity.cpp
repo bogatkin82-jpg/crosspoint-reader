@@ -183,7 +183,17 @@ void CalendarMonthActivity::render(RenderLock&&) {
   }
   for (size_t i = 0; i < n && y + lineH <= bottom; i++) {
     const ics::Event& ev = cal.events()[occ[i].event];
-    std::string line = occ[i].continued || ev.startMin < 0 ? std::string(tr(STR_CAL_ALL_DAY)) : formatTime(ev.startMin);
+    std::string line;
+    if (occ[i].continued || ev.startMin < 0) {
+      line = tr(STR_CAL_ALL_DAY);
+    } else {
+      line = formatTime(ev.startMin);
+      // "14:00-15:00"; an event running past midnight still shows its end time.
+      if (ev.endMin >= 0 && (ev.endMin != ev.startMin || ev.endDay != ev.startDay)) {
+        line += "-";
+        line += formatTime(ev.endMin);
+      }
+    }
     line += "  ";
     data.eventText(ev, &summary, nullptr);
     line += summary.empty() ? tr(STR_CAL_UNTITLED) : summary.c_str();
