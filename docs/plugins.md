@@ -1,7 +1,21 @@
-# Plugins
+# Calendar and the built-in plugin host
 
-Home → **Plugins** lists the plugins installed on the SD card and the built-in
-plugin types that can be installed.
+> [!NOTE]
+> The official SD plugin system (`manifest.json`, `plugin.js`, `device.json`,
+> Plugin Hub) is documented in [sd-plugins.md](sd-plugins.md). This page
+> describes the small host the fork added for the calendar: a folder with
+> `plugin.json` bound to a runtime compiled into the firmware. In this build the
+> calendar is opened from **Home → Calendar** and installed on first use; the
+> host's own list screen is not reachable from Home and will be removed.
+
+## Calendar
+
+**Home → Calendar** opens the agenda. On first use the firmware creates
+`/plugins/calendar`, seeds `tasks.ics` and writes `plugin.json`. The calendar is
+built into the firmware, so it is not gated by Settings → Connectivity →
+Plugins. If the folder exists but its manifest is unreadable, the firmware
+reports an error instead of creating a second copy; if the plugin is disabled,
+re-enable it by setting `"enabled": true` in `plugin.json`.
 
 ## Layout on the SD card
 
@@ -22,13 +36,12 @@ plugin types that can be installed.
 }
 ```
 
-* Confirm on an installed plugin opens it; long-press Confirm shows
-  Open / Enable-Disable / Remove.
-* Confirm on an entry under "Available to install" creates its folder, seeds
-  default files and writes `plugin.json`.
-* A folder can be copied, renamed and edited by hand (USB, web file manager,
-  WebDAV). Several folders may use the same runtime, e.g. `/plugins/work` and
-  `/plugins/home`, each with its own `.ics` files.
+Folders can be copied, renamed and edited by hand (USB, web file manager,
+WebDAV), and several folders may use the same runtime, each with its own `.ics`
+files. The Home row only ever opens `/plugins/calendar`; a renamed folder needs
+its own entry point in the firmware. The same applies to new runtimes: adding
+one to `RUNTIMES` makes it available to code, but no Home row is created
+automatically.
 
 ## Why runtimes, not loadable code
 
@@ -62,10 +75,14 @@ Reads every `*.ics` file in the plugin folder (or the list in `config.files`).
 Period row → **Sync** connects to Wi-Fi (saved networks or the picker), syncs
 the clock over NTP, downloads every feed to `<file>.part`, rejects responses
 that are not a `VCALENDAR` (SSO/login pages) and swaps the file in, keeping the
-old copy on failure. The last success time is stored in `<folder>/.lastsync`.
-Leaving the screen restarts the device silently back into the plugin to return
-the Wi-Fi/TLS heap, like the other Wi-Fi screens. HTTPS is verified against the
-firmware CA bundle; feeds behind a VPN or a corporate login are not reachable.
+old copy on failure. The last success time is stored in `<folder>/.lastsync`,
+the last attempt in `<folder>/.lastattempt` so an automatically synced
+failing feed is not retried on every open. Leaving the screen restarts the device silently back into the
+calendar to return the Wi-Fi/TLS heap, like the other Wi-Fi screens; on touch
+boards, where a software reset would cycle the panel rails, the calendar is
+reloaded in place instead. HTTPS is
+verified against the firmware CA bundle; feeds behind a VPN or a corporate login
+are not reachable.
 
 Busy-only feeds (times without SUMMARY) can be combined with a full export
 copied in by hand: in the agenda an untitled occurrence is hidden when a titled
@@ -82,11 +99,14 @@ Supported:
   `PERCENT-COMPLETE`. Toggling, deleting and adding tasks rewrite the file
   in place (streaming, via `.tmp` + `.bak`), keeping every other line intact.
 
-Limits (RAM): 300 events within [today − 31 days, today + 400 days], 300 tasks,
-20 KB of titles/locations; extra entries are skipped and a notice is shown.
-`TZID=` parameters are treated as the device's local time zone.
+Limits (RAM): 500 events within [today − 31 days, today + 400 days], 300 tasks,
+20 KB for task titles and UIDs; event titles and locations stay on the SD card
+as file offsets and are read for the rows on screen. Extra entries are skipped
+and a notice is shown. `TZID=` parameters are treated as the device's local time
+zone.
 
-Times need the RTC (X3) set: Settings → clock sync.
+Times need the clock: Settings → System → Clock → Sync Clock Now (shown only on
+devices with an RTC).
 
 ### Feeds only reachable from a computer
 

@@ -1,7 +1,9 @@
 #include "FullScreenMessageActivity.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 void FullScreenMessageActivity::onEnter() {
@@ -12,5 +14,18 @@ void FullScreenMessageActivity::onEnter() {
 
   renderer.clearScreen();
   renderer.drawCenteredText(UI_10_FONT_ID, top, text.c_str(), true, style);
+  if (dismissible) {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
   renderer.displayBuffer(refreshMode);
+}
+
+void FullScreenMessageActivity::loop() {
+  if (!dismissible) return;
+  using B = MappedInputManager::Button;
+  if (mappedInput.wasReleased(B::Back) || mappedInput.wasReleased(B::Confirm) ||
+      mappedInput.wasReleased(B::Left) || mappedInput.wasReleased(B::Right)) {
+    finish();
+  }
 }

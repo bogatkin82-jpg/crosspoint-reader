@@ -99,8 +99,10 @@ void CalendarActivity::onEnter() {
 
   const int hours = data->autoSyncHours();
   const int64_t now = nowUtcEpoch();
+  const int64_t lastAttempt = readLastAttempt(manifest.dir);
+  const int64_t lastTouch = lastAttempt > lastSync ? lastAttempt : lastSync;
   autoSyncPending = hours > 0 && !data->subscriptions().empty() && now > 0 &&
-                    now - lastSync >= static_cast<int64_t>(hours) * 3600;
+                    now - lastTouch >= static_cast<int64_t>(hours) * 3600;
 }
 
 void CalendarActivity::onExit() {
@@ -113,11 +115,18 @@ void CalendarActivity::onExit() {
 }
 
 void CalendarActivity::reload() {
-  RenderLock lock;
-  GUI.drawPopup(renderer, tr(STR_CAL_LOADING));
+  {
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_CAL_LOADING));
+  }
+  // Parsing touches the SD card and must not block the render task.
   data->load(manifest, today);
-  lastSync = readLastSync(manifest.dir);
-  rebuildRowsLocked();
+  {
+    RenderLock lock;
+    lastSync = readLastSync(manifest.dir);
+    rebuildRowsLocked();
+  }
+  requestUpdate();
 }
 
 void CalendarActivity::setPeriodStart(int32_t day) {
@@ -172,9 +181,9 @@ void CalendarActivity::rebuildRowsLocked() {
 void CalendarActivity::buildAgendaRows() {
   const ics::Calendar& cal = data->calendar();
   const int days = data->daysAhead();
-  // Modest reserve; texts may grow (ListItem pointers are taken afterwards).
-  rows.reserve(48);
-  texts.reserve(48);
+  // ListItem pointers are taken after texts is final; reserve the row cap.
+  rows.reserve(MAX_AGENDA_ROWS + 2);
+  texts.reserve(MAX_AGENDA_ROWS + 2);
 
   // Period row.
   {
@@ -252,8 +261,8 @@ void CalendarActivity::buildAgendaRows() {
 void CalendarActivity::buildTaskRows() {
   const ics::Calendar& cal = data->calendar();
   const auto& todos = cal.todos();
-  rows.reserve(std::min<size_t>(todos.size(), 48) + 3);
-  texts.reserve(std::min<size_t>(todos.size(), 48) + 3);
+  rows.reserve(MAX_AGENDA_ROWS + 2);
+  texts.reserve(MAX_AGENDA_ROWS + 2);
 
   {
     RowText t;
@@ -343,6 +352,12 @@ void CalendarActivity::buildScreen(UiScreen& screen) {
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   buildTabBar(screen);
+  if (rowItems.empty()) {
+    // reload() parses outside the render lock; paint the placeholder instead
+    // of an empty list if a repaint lands in that window.
+    screen.centeredText(tr(STR_CAL_LOADING), screen.theme().bodyText);
+    return;
+  }
 
   fui::ListProps props;
   props.items = rowItems.data();
@@ -396,7 +411,9 @@ bool CalendarActivity::handleButtons() {
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
+    // The calendar is the stack root (opened with replaceActivity), so finish()
+    // would land on Home with no row selected. Highlight its own row instead.
+    onGoHome(HomeMenuItem::CALENDAR);
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {

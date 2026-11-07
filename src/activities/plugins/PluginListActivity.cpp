@@ -74,7 +74,7 @@ void PluginListActivity::refresh() {
 
 const char* PluginListActivity::headerTitle() const { return tr(STR_PLUGINS); }
 
-void PluginListActivity::onBackButton() { activityManager.goHome(HomeMenuItem::PLUGINS); }
+void PluginListActivity::onBackButton() { activityManager.goHome(HomeMenuItem::CALENDAR); }
 
 void PluginListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();

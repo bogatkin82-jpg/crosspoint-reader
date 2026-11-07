@@ -65,7 +65,12 @@ class Calendar {
   };
 
   void clear();
-  void setLimits(const Limits& l) { limits = l; }
+  void setLimits(const Limits& l) {
+    limits = l;
+    events_.reserve(l.maxEvents);
+    todos_.reserve(l.maxTodos);
+    arena.reserve(l.maxArena + 1);
+  }
   void setUtcConverter(UtcToLocalFn fn) { toLocal = fn ? fn : utcIdentity; }
 
   // Streaming parse: call begin(fileIndex), feed() with raw bytes as they are

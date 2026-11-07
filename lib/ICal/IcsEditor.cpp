@@ -1,5 +1,6 @@
 #include "IcsEditor.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -8,6 +9,7 @@ namespace ics {
 
 namespace {
 constexpr size_t MAX_COMPONENT_BYTES = 16 * 1024;  // buffered VTODO cap
+constexpr size_t MAX_COMPONENT_LINES = 256;         // physical lines per VTODO
 
 // Physical-line reader over a Source; strips CR/LF terminators.
 class PhysReader {
@@ -99,7 +101,7 @@ struct Group {
 
 std::vector<Group> groupLines(const std::vector<std::string>& phys) {
   std::vector<Group> groups;
-  groups.reserve(phys.size());
+  groups.reserve(std::min(phys.size(), MAX_COMPONENT_LINES));
   int depth = 0;
   for (size_t i = 0; i < phys.size(); i++) {
     if (isCont(phys[i]) && !groups.empty()) {
@@ -191,7 +193,7 @@ EditStatus editTodo(Source& src, Sink& out, const char* uid, TodoEdit edit, cons
 
     comp.push_back(p);
     compBytes += p.size();
-    if (compBytes > MAX_COMPONENT_BYTES) return EditStatus::TooLarge;
+    if (compBytes > MAX_COMPONENT_BYTES || comp.size() > MAX_COMPONENT_LINES) return EditStatus::TooLarge;
     if (isCont(p)) continue;
     splitLine(p, name, value);
     if (name == "BEGIN") {

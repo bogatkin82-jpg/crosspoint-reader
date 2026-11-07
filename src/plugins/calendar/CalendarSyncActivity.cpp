@@ -46,12 +46,14 @@ void CalendarSyncActivity::onEnter() {
     requestUpdate();
     return;
   }
+  // Tear the radio down on the way out even when it was already up: the
+  // calendar is parsed again right after, and TLS memory must be gone by then.
+  tearDownWifi = true;
   if (WiFi.status() == WL_CONNECTED) {
     state = State::Syncing;
     requestUpdate();
     return;
   }
-  tearDownWifi = true;
   state = State::WaitingWifi;
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) {
@@ -67,10 +69,13 @@ void CalendarSyncActivity::onEnter() {
 
 void CalendarSyncActivity::onExit() {
   Activity::onExit();
+  // Record the attempt even when the picker was cancelled or never connected,
+  // so auto-sync does not retry (and reboot) on every calendar open.
+  if (tearDownWifi) writeLastAttempt(manifest.dir, nowUtcEpoch());
   if (tearDownWifi && WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
+    WiFi.disconnect(true);
     delay(30);
-    silentRestartToPlugin(manifest.dir.c_str());
+    silentRestartToCalendar(manifest.dir.c_str());
   }
 }
 
@@ -137,7 +142,9 @@ void CalendarSyncActivity::runSync() {
       errorText = err;
     }
   }
-  if (okCount > 0) writeLastSync(manifest.dir, nowUtcEpoch());
+  const int64_t now = nowUtcEpoch();
+  if (okCount > 0) writeLastSync(manifest.dir, now);
+  writeLastAttempt(manifest.dir, now);
   LOG_INF("CALSYNC", "Synced %d/%u feeds", okCount, static_cast<unsigned>(subs.size()));
   state = State::Done;
   requestUpdate();

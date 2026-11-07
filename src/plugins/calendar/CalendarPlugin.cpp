@@ -114,6 +114,19 @@ void writeLastSync(const std::string& dir, int64_t epoch) {
   Storage.writeFile((dir + "/.lastsync").c_str(), String(buf));
 }
 
+int64_t readLastAttempt(const std::string& dir) {
+  const std::string path = dir + "/.lastattempt";
+  if (!Storage.exists(path.c_str())) return 0;
+  const String s = Storage.readFile(path.c_str());
+  return static_cast<int64_t>(atoll(s.c_str()));
+}
+
+void writeLastAttempt(const std::string& dir, int64_t epoch) {
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(epoch));
+  Storage.writeFile((dir + "/.lastattempt").c_str(), String(buf));
+}
+
 int64_t nowUtcEpoch() {
   struct tm t {};
   if (!halClock.isAvailable() || !halClock.localTime(t) || !clockLooksSet(t)) return 0;
@@ -223,7 +236,7 @@ bool CalendarData::load(const Manifest& manifest, int32_t today) {
   cal.clear();
   cal.setUtcConverter(&utcToLocal);
   ics::Calendar::Limits limits;
-  limits.maxEvents = 500;  // 44 B each; titles stay on the SD card
+  limits.maxEvents = 500;  // 36 B each; titles stay on the SD card
   limits.maxTodos = 300;
   limits.maxArena = 20 * 1024;
   limits.windowStart = today - 31;

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include <I18n.h>
+
 #include "CalendarPlugin.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
@@ -46,7 +48,10 @@ class CalendarActivity final : public UiTabListActivity {
   void onRowLongPress(int index) override;
   bool handleButtons() override;
   bool handleCustomInput() override;
-  const char* headerTitle() const override { return manifest.name.c_str(); }
+  const char* headerTitle() const override {
+    const plugins::Runtime* runtime = plugins::findRuntime(manifest.runtime);
+    return runtime ? I18N.get(runtime->nameId) : manifest.name.c_str();
+  }
   void drawFooter() override;
 
   void reload();

@@ -10,8 +10,13 @@
 void silentRestart();            // home screen
 void silentRestartToReader();    // currently-open EPUB (APP_STATE.openEpubPath)
 void silentRestartToSettings();  // settings screen
-// Reopens the plugin in `pluginDir` (/plugins/<folder>) after the reboot.
-void silentRestartToPlugin(const char* pluginDir);
+// Reboot into the File Transfer > Join Network flow on a pristine heap, so the
+// WiFi + TLS working set has the contiguous RAM it needs on tight boards. A
+// no-op on touch boards (a soft reset would cycle their externally-powered
+// rails); the caller then proceeds without a reboot.
+void silentRestartToJoinNetwork();
+// Reopens the calendar in `pluginDir` (/plugins/<folder>) after the reboot.
+void silentRestartToCalendar(const char* pluginDir);
 
 // Reboots immediately after an activity releases exclusive raw storage. The
 // RTC target ensures setup() lands on Home instead of resuming a reader.

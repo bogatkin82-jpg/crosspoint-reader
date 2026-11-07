@@ -33,6 +33,10 @@ struct Subscription {
 // Last successful sync time (UTC epoch) kept in <dir>/.lastsync; 0 if never.
 int64_t readLastSync(const std::string& dir);
 void writeLastSync(const std::string& dir, int64_t epoch);
+// Last sync attempt (success or failure) in <dir>/.lastattempt; 0 if never.
+// Bounds auto-sync retries so an unreachable feed cannot reboot in a loop.
+int64_t readLastAttempt(const std::string& dir);
+void writeLastAttempt(const std::string& dir, int64_t epoch);
 
 extern const Runtime RUNTIME;
 

@@ -12,6 +12,7 @@ constexpr size_t MAX_SUMMARY = 120;     // bytes kept per title
 constexpr size_t MAX_UID = 160;         // bytes kept per todo UID
 constexpr int MAX_COUNT_SCAN = 20000;   // day steps when resolving COUNT
 constexpr int MAX_SPAN_SCAN = 62;       // longest multi-day event looked back on
+constexpr size_t MAX_EXDATES = 4096;    // bound on excluded/overridden instances
 
 bool ieq(const std::string& a, const char* b) {
   const size_t n = strlen(b);
@@ -296,7 +297,13 @@ void Calendar::onProperty(const std::string& name, const std::string& params, co
       size_t comma = value.find(',', pos);
       if (comma == std::string::npos) comma = value.size();
       DateTime dt;
-      if (parseDateTime(value.c_str() + pos, comma - pos, dt)) cur.exdates.push_back(toLocalDt(dt).day);
+      if (parseDateTime(value.c_str() + pos, comma - pos, dt)) {
+        if (cur.exdates.size() < MAX_EXDATES) {
+          cur.exdates.push_back(toLocalDt(dt).day);
+        } else {
+          truncated_ = true;
+        }
+      }
       pos = comma + 1;
     }
   } else if (name == "RECURRENCE-ID") {
@@ -430,7 +437,13 @@ void Calendar::commitEvent() {
                                : hashUid(cur.uid.c_str(), cur.uid.size());
 
   // An overridden instance hides the matching occurrence of its master series.
-  if (cur.recurrenceId.valid()) exdates_.push_back({ev.uidHash, toLocalDt(cur.recurrenceId).day});
+  if (cur.recurrenceId.valid()) {
+    if (exdates_.size() < MAX_EXDATES) {
+      exdates_.push_back({ev.uidHash, toLocalDt(cur.recurrenceId).day});
+    } else {
+      truncated_ = true;
+    }
+  }
 
   // Resolve COUNT now so finished series are dropped before they take a slot.
   if (ev.freq != Freq::None && ev.count > 0) {
@@ -452,7 +465,13 @@ void Calendar::commitEvent() {
   }
   ev.summaryPos = cur.summaryPos;
   ev.locationPos = cur.locationPos;
-  for (const int32_t d : cur.exdates) exdates_.push_back({ev.uidHash, d});
+  for (const int32_t d : cur.exdates) {
+    if (exdates_.size() >= MAX_EXDATES) {
+      truncated_ = true;
+      break;
+    }
+    exdates_.push_back({ev.uidHash, d});
+  }
   events_.push_back(ev);
 }
 
