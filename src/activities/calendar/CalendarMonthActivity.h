@@ -2,11 +2,11 @@
 
 #include <IcsCalendar.h>
 
-#include "CalendarPlugin.h"
+#include "CalendarData.h"
 
 #include "activities/Activity.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
 // Month grid: today is drawn inverted, days with events carry a bar under
 // the number, the selected day is framed and its events are listed below.
@@ -43,4 +43,4 @@ class CalendarMonthActivity final : public Activity {
   int32_t* pickedDay;
 };
 
-}  // namespace plugins::calendar
+}  // namespace calendar

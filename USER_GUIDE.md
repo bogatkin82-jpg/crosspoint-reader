@@ -37,6 +37,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [Cover settings](#cover-settings)
       - [Custom images](#custom-images)
     - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
+    - [3.9 Calendar](#39-calendar)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -629,6 +630,27 @@ If the reader shows **Damaged font file**, a `.cpfont` file on the SD card is br
 See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
 
 ---
+
+### 3.9 Calendar
+
+**Home → Calendar** opens the built-in agenda. It reads iCal (`.ics`) files from
+`/calendar` on the SD card and creates the folder with a starter task list on
+first use. Devices that still keep their files in `/plugins/calendar` from an
+earlier plugin build continue to use that folder.
+
+- **Events** shows the next 30 days by default (`daysAhead` in
+  `/calendar/calendar.json`). The period row opens the month grid, steps by
+  week or month, reloads the files and starts a feed sync (when a feed is
+  set in `calendar.json`).
+- **Tasks** lists `VTODO` entries. Confirm toggles a task, hold Confirm offers
+  delete, and **+ New task** appends one to `tasks.ics`.
+- **Sync** downloads the iCal feed configured as `url` in `calendar.json` over
+  Wi-Fi. HTTPS feeds behind a VPN or a corporate login are not reachable; use
+  `tools/calendar-sync/` on a computer for those.
+- Times need the clock: Settings → System → Clock → Sync Clock Now (only on
+  devices with an RTC).
+
+See [docs/calendar.md](docs/calendar.md) for the configuration keys and limits.
 
 ## 4. Reading Mode
 

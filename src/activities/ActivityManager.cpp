@@ -6,7 +6,6 @@
 #include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
-#include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
 #include <VectorFontSupport.h>
@@ -17,6 +16,8 @@
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "OpdsServerStore.h"
+#include "activities/calendar/CalendarActivity.h"
+#include "activities/calendar/CalendarConfig.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -28,8 +29,6 @@
 #include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
 #include "plugins/PluginCatalogActivity.h"
-#include "plugins/PluginRegistry.h"
-#include "plugins/calendar/CalendarPlugin.h"
 #include "reader/ReaderActivity.h"
 #include "reader/RemoteTurnGate.h"
 #include "settings/OpdsServerListActivity.h"
@@ -328,43 +327,27 @@ void ActivityManager::goToPlugins(bool showOpds) {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
 }
 
-void ActivityManager::goToCalendar() {
-  const std::string dir = std::string(plugins::PLUGINS_DIR) + "/" + calendar::RUNTIME.defaultFolder;
-  auto showError = [this](StrId message) {
-    goToFullScreenMessage(I18N.get(message), EpdFontFamily::REGULAR, /*dismissible=*/true);
-  };
-
-  plugins::Manifest manifest;
-  if (!plugins::loadManifest(dir, manifest)) {
-    // A folder without a readable manifest is not "not installed": installing
-    // again would create calendar-2 and hide the user's files.
-    if (Storage.exists(dir.c_str())) {
-      LOG_ERR("ACT", "Calendar folder has no readable manifest: %s", dir.c_str());
-      showError(STR_CAL_ERR_MANIFEST);
-      return;
-    }
-    if (!plugins::installBuiltin(calendar::RUNTIME, &manifest)) {
-      LOG_ERR("ACT", "Cannot install the calendar plugin");
-      showError(STR_CAL_ERR_INSTALL);
-      return;
-    }
-  } else if (!manifest.enabled) {
-    LOG_ERR("ACT", "Calendar is disabled in %s", dir.c_str());
-    showError(STR_CAL_ERR_DISABLED);
-    return;
+bool ActivityManager::goToCalendar() {
+  calendar::Config config;
+  switch (calendar::loadConfig(config)) {
+    case calendar::LoadResult::Storage:
+      LOG_ERR("ACT", "Cannot create the calendar data folder");
+      goToFullScreenMessage(tr(STR_CAL_ERR_STORAGE), EpdFontFamily::REGULAR, /*dismissible=*/true);
+      return true;
+    case calendar::LoadResult::BadConfig:
+      LOG_ERR("ACT", "Cannot parse the calendar configuration");
+      goToFullScreenMessage(tr(STR_CAL_ERR_MANIFEST), EpdFontFamily::REGULAR, /*dismissible=*/true);
+      return true;
+    case calendar::LoadResult::Ok:
+      break;
   }
-  const plugins::Runtime* runtime = plugins::findRuntime(manifest.runtime);
-  if (!runtime) {
-    LOG_ERR("ACT", "Unsupported calendar runtime: %s", manifest.runtime.c_str());
-    showError(STR_CAL_ERR_RUNTIME);
-    return;
-  }
-  auto activity = runtime->create(renderer, mappedInput, manifest);
+  auto activity = makeUniqueNoThrow<CalendarActivity>(renderer, mappedInput, config);
   if (!activity) {
     LOG_ERR("ACT", "OOM: calendar activity");
-    return;
+    return false;
   }
   replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {

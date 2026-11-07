@@ -19,7 +19,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
 namespace {
 // A feed must start with BEGIN:VCALENDAR (after an optional BOM/whitespace);
@@ -71,11 +71,11 @@ void CalendarSyncActivity::onExit() {
   Activity::onExit();
   // Record the attempt even when the picker was cancelled or never connected,
   // so auto-sync does not retry (and reboot) on every calendar open.
-  if (tearDownWifi) writeLastAttempt(manifest.dir, nowUtcEpoch());
+  if (tearDownWifi) writeLastAttempt(config.dir, nowUtcEpoch());
   if (tearDownWifi && WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(true);
     delay(30);
-    silentRestartToCalendar(manifest.dir.c_str());
+    silentRestartToCalendar();
   }
 }
 
@@ -143,8 +143,8 @@ void CalendarSyncActivity::runSync() {
     }
   }
   const int64_t now = nowUtcEpoch();
-  if (okCount > 0) writeLastSync(manifest.dir, now);
-  writeLastAttempt(manifest.dir, now);
+  if (okCount > 0) writeLastSync(config.dir, now);
+  writeLastAttempt(config.dir, now);
   LOG_INF("CALSYNC", "Synced %d/%u feeds", okCount, static_cast<unsigned>(subs.size()));
   state = State::Done;
   requestUpdate();
@@ -209,4 +209,4 @@ void CalendarSyncActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-}  // namespace plugins::calendar
+}  // namespace calendar

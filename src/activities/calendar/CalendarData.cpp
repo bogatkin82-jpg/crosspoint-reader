@@ -1,9 +1,7 @@
-#include "CalendarPlugin.h"
+#include "CalendarData.h"
 
-#include <ArduinoJson.h>
 #include <HalClock.h>
 #include <HalStorage.h>
-#include <I18n.h>
 #include <IcsEditor.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -16,9 +14,8 @@
 #include <cstring>
 #include <ctime>
 
-#include "CalendarActivity.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
 namespace {
 constexpr int MAX_FILES = 16;
@@ -55,35 +52,9 @@ bool hasIcsExtension(const char* name) {
   return n > 4 && strcasecmp(name + n - 4, ".ics") == 0;
 }
 
-std::string resolvePath(const std::string& dir, const std::string& p) { return p[0] == '/' ? p : dir + "/" + p; }
 
 bool clockLooksSet(const struct tm& t) { return t.tm_year + 1900 >= 2024; }
-
-bool seedCalendar(const std::string& dir) {
-  const std::string path = dir + "/tasks.ics";
-  HalFile out;
-  if (!Storage.openFileForWrite("CAL", path, out)) return false;
-  HalSink sink(out);
-  char uid[48];
-  snprintf(uid, sizeof(uid), "welcome-%08lx@crosspoint", static_cast<unsigned long>(esp_random()));
-  char stamp[20];
-  ics::formatUtcStamp(nowUtcEpoch(), stamp, sizeof(stamp));
-  ics::NewTodo todo;
-  todo.summary = tr(STR_CAL_WELCOME_TASK);
-  todo.uid = uid;
-  return ics::appendTodo(nullptr, sink, todo, stamp) == ics::EditStatus::Ok;
-}
-
-std::unique_ptr<Activity> createCalendar(GfxRenderer& renderer, MappedInputManager& input, const Manifest& m) {
-  auto activity = makeUniqueNoThrow<CalendarActivity>(renderer, input, m);
-  if (!activity) LOG_ERR("CAL", "OOM: calendar activity");
-  return activity;
-}
 }  // namespace
-
-const Runtime RUNTIME = {
-    "ical", StrId::STR_CAL_TITLE, StrId::STR_CAL_DESC, "calendar", "1.0", &seedCalendar, &createCalendar,
-};
 
 bool localToday(int32_t& day) {
   struct tm t {};
@@ -171,54 +142,30 @@ bool CalendarData::fileHasEvents(uint8_t file) const {
   return false;
 }
 
-bool CalendarData::load(const Manifest& manifest, int32_t today) {
+bool CalendarData::load(const Config& config, int32_t today) {
   closeReader();
-  if (&manifest != &manifestCopy) manifestCopy = manifest;
+  if (&config != &configCopy) configCopy = config;
   today_ = today;
   paths.clear();
-  tasksPath.clear();
-  daysAhead_ = 30;
-
-  JsonDocument config;
-  if (deserializeJson(config, manifest.configJson.c_str())) config.to<JsonObject>();
-  const int days = config["daysAhead"] | 30;
+  tasksPath = config.tasksFile.empty() ? config.dir + "/tasks.ics" : config.tasksFile;
+  const int days = config.daysAhead;
   daysAhead_ = days < 7 ? 7 : (days > 120 ? 120 : days);
-  const char* tasks = config["tasksFile"] | "tasks.ics";
-  tasksPath = resolvePath(manifest.dir, tasks);
-  const int autoHours = config["autoSyncHours"] | 0;
-  autoSyncHours_ = autoHours < 0 ? 0 : autoHours;
+  autoSyncHours_ = config.autoSyncHours < 0 ? 0 : config.autoSyncHours;
+  subs = config.subscriptions;
 
-  subs.clear();
-  if (config["url"].is<const char*>()) {
-    const char* file = config["file"] | "subscription.ics";
-    subs.push_back({config["url"].as<const char*>(), resolvePath(manifest.dir, *file ? file : "subscription.ics")});
-  }
-  if (config["subscriptions"].is<JsonArrayConst>()) {
-    int n = 0;
-    for (JsonObjectConst s : config["subscriptions"].as<JsonArrayConst>()) {
-      const char* url = s["url"] | "";
-      if (!*url || subs.size() >= 8) continue;
-      char def[32];
-      snprintf(def, sizeof(def), "subscription-%d.ics", ++n);
-      const char* file = s["file"] | def;
-      subs.push_back({url, resolvePath(manifest.dir, *file ? file : def)});
-    }
-  }
-
-  if (config["files"].is<JsonArrayConst>()) {
-    for (JsonVariantConst f : config["files"].as<JsonArrayConst>()) {
-      const char* p = f | "";
-      if (*p && paths.size() < MAX_FILES) paths.push_back(resolvePath(manifest.dir, p));
+  if (!config.files.empty()) {
+    for (const auto& p : config.files) {
+      if (paths.size() < MAX_FILES) paths.push_back(p);
     }
   } else {
-    auto dir = Storage.open(manifest.dir.c_str());
+    auto dir = Storage.open(config.dir.c_str());
     if (dir && dir.isDirectory()) {
       dir.rewindDirectory();
       char name[96];
       for (auto entry = dir.openNextFile(); entry && paths.size() < MAX_FILES; entry = dir.openNextFile()) {
         entry.getName(name, sizeof(name));
         if (entry.isDirectory() || name[0] == '.' || !hasIcsExtension(name)) continue;
-        paths.push_back(manifest.dir + "/" + name);
+        paths.push_back(config.dir + "/" + name);
       }
     }
   }
@@ -318,7 +265,7 @@ CalendarData::EditResult CalendarData::setTodoDone(size_t todoIndex, bool done) 
     return EditResult::Failed;
   }
   if (fileHasEvents(t.file)) {
-    load(manifestCopy, today_);  // event offsets in this file moved
+    load(configCopy, today_);  // event offsets in this file moved
   } else {
     cal.setTodoCompleted(todoIndex, done);
     cal.sortTodos();
@@ -335,7 +282,7 @@ CalendarData::EditResult CalendarData::deleteTodo(size_t todoIndex) {
   const uint8_t file = t.file;
   if (!rewrite(paths[file], uidCopy.c_str(), ics::TodoEdit::Delete)) return EditResult::Failed;
   if (fileHasEvents(file)) {
-    load(manifestCopy, today_);
+    load(configCopy, today_);
   } else {
     cal.removeTodo(todoIndex);
   }
@@ -389,7 +336,7 @@ bool CalendarData::addTodo(const std::string& summary, int32_t dueDay) {
   } else if (!Storage.rename(tmp.c_str(), tasksPath.c_str())) {
     return false;
   }
-  return load(manifestCopy, today_);
+  return load(configCopy, today_);
 }
 
-}  // namespace plugins::calendar
+}  // namespace calendar

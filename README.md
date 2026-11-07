@@ -54,7 +54,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 
 - **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. Plugins follow [CrossPoint's reading-focused scope](SCOPE.md#out-of-scope). See the [plugin guide](docs/sd-plugins.md).
-- **Calendar**: built-in agenda, month view and an editable task list from iCal `.ics` files, with optional feed sync over Wi-Fi. Open **Home → Calendar**. See the [calendar guide](docs/plugins.md).
+- **Calendar**: built-in agenda, month view and an editable task list from iCal `.ics` files, with optional feed sync over Wi-Fi. Open **Home → Calendar**. See the [calendar guide](docs/calendar.md).
 
 ### Coming soon:
 

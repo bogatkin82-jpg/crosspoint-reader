@@ -9,7 +9,7 @@ CONF="$HOME/.config/crosspoint-cal-sync.conf"
 [ -f "$CONF" ] && . "$CONF"
 : "${ICS_URL:?ICS_URL is not set in $CONF}"
 BOOK_HOST="${BOOK_HOST:-crosspoint.local}"
-BOOK_PATH="${BOOK_PATH:-/plugins/calendar/calendar-full.ics}"
+BOOK_PATH="${BOOK_PATH:-/calendar/calendar-full.ics}"
 MIN_DOWNLOAD_INTERVAL="${MIN_DOWNLOAD_INTERVAL:-1800}"   # seconds between feed downloads
 
 STATE="$HOME/Library/Application Support/crosspoint-cal-sync"

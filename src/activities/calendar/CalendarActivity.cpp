@@ -18,7 +18,7 @@
 
 namespace fui = freeink::ui;
 
-namespace plugins::calendar {
+namespace calendar {
 
 namespace {
 constexpr unsigned long LONG_PRESS_MS = 1000;
@@ -79,8 +79,8 @@ std::string formatTime(int16_t minute) {
   return buf;
 }
 
-CalendarActivity::CalendarActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Manifest& manifest)
-    : UiTabListActivity("Calendar", renderer, mappedInput, true), manifest(manifest) {
+CalendarActivity::CalendarActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Config& config)
+    : UiTabListActivity("Calendar", renderer, mappedInput, true), config(config) {
   tabPillMaxPad = 16;
 }
 
@@ -99,7 +99,7 @@ void CalendarActivity::onEnter() {
 
   const int hours = data->autoSyncHours();
   const int64_t now = nowUtcEpoch();
-  const int64_t lastAttempt = readLastAttempt(manifest.dir);
+  const int64_t lastAttempt = readLastAttempt(config.dir);
   const int64_t lastTouch = lastAttempt > lastSync ? lastAttempt : lastSync;
   autoSyncPending = hours > 0 && !data->subscriptions().empty() && now > 0 &&
                     now - lastTouch >= static_cast<int64_t>(hours) * 3600;
@@ -120,10 +120,10 @@ void CalendarActivity::reload() {
     GUI.drawPopup(renderer, tr(STR_CAL_LOADING));
   }
   // Parsing touches the SD card and must not block the render task.
-  data->load(manifest, today);
+  data->load(config, today);
   {
     RenderLock lock;
-    lastSync = readLastSync(manifest.dir);
+    lastSync = readLastSync(config.dir);
     rebuildRowsLocked();
   }
   requestUpdate();
@@ -397,7 +397,8 @@ bool CalendarActivity::handleCustomInput() {
   }
   if (deferredMessage && !popup.isActive()) {
     const char* options[] = {tr(STR_BACK)};
-    popup.show(manifest.name.c_str(), deferredMessage, options, 1, 0, [](int) {});
+    popup.show(config.name.empty() ? tr(STR_CAL_TITLE) : config.name.c_str(), deferredMessage, options, 1, 0,
+               [](int) {});
     deferredMessage = nullptr;
     requestUpdate();
     return true;
@@ -521,7 +522,7 @@ void CalendarActivity::startSync() {
     showMessage(tr(STR_CAL_SYNC_NO_URL));
     return;
   }
-  auto sync = makeUniqueNoThrow<CalendarSyncActivity>(renderer, mappedInput, manifest, std::move(subs));
+  auto sync = makeUniqueNoThrow<CalendarSyncActivity>(renderer, mappedInput, config, std::move(subs));
   if (!sync) {
     LOG_ERR("CAL", "OOM: sync activity");
     return;
@@ -652,4 +653,4 @@ void CalendarActivity::startAddTask() {
   });
 }
 
-}  // namespace plugins::calendar
+}  // namespace calendar

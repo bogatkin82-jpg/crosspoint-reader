@@ -93,7 +93,8 @@ class ActivityManager {
   void goToLibrary();
   void goToBrowser();
   void goToPlugins(bool showOpds);
-  void goToCalendar();
+  // Returns false when no activity was started (out of memory).
+  bool goToCalendar();
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();

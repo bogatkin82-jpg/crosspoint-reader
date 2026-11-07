@@ -17,7 +17,7 @@ if [ ! -f "$CONF" ]; then
 ICS_URL='$URL'
 # Reader address; use the IP shown on the File Transfer screen if crosspoint.local does not resolve
 BOOK_HOST='crosspoint.local'
-BOOK_PATH='/plugins/calendar/calendar-full.ics'
+BOOK_PATH='/calendar/calendar-full.ics'
 CONFEOF
   chmod 600 "$CONF"
 fi

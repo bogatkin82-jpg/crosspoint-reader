@@ -9,26 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "plugins/PluginRegistry.h"
+#include "CalendarConfig.h"
 
-// "ical" runtime: an agenda / month view of VEVENTs and an editable to-do
-// list of VTODOs, read from the .ics files in the plugin folder.
-//
-// Manifest config (all optional):
-//   "files":     [".ics paths"]  relative to the plugin folder or absolute;
-//                                default: every *.ics in the folder
-//   "tasksFile": "tasks.ics"     where new tasks are written
-//   "daysAhead": 30              length of the agenda period (7..120)
-//   "url": "https://..."         internet calendar (iCal feed) to download
-//                                into "subscription.ics"; or a list:
-//   "subscriptions": [{"url": "...", "file": "work.ics"}, ...]
-//   "autoSyncHours": 0           sync on open when older than N hours (0 = off)
-namespace plugins::calendar {
-
-struct Subscription {
-  std::string url;
-  std::string path;  // absolute destination on the SD card
-};
+// Agenda/month/task model over the .ics files in the calendar folder.
+namespace calendar {
 
 // Last successful sync time (UTC epoch) kept in <dir>/.lastsync; 0 if never.
 int64_t readLastSync(const std::string& dir);
@@ -37,8 +21,6 @@ void writeLastSync(const std::string& dir, int64_t epoch);
 // Bounds auto-sync retries so an unreachable feed cannot reboot in a loop.
 int64_t readLastAttempt(const std::string& dir);
 void writeLastAttempt(const std::string& dir, int64_t epoch);
-
-extern const Runtime RUNTIME;
 
 // Local "today" from the RTC. Returns false (and a build-date fallback) when
 // the device has no RTC or the clock was never set.
@@ -50,9 +32,9 @@ class CalendarData {
  public:
   enum class EditResult : uint8_t { Ok, ReadOnly, Failed };
 
-  // Parses the plugin's .ics files. Events are kept for
+  // Parses the configured .ics files. Events are kept for
   // [today - 31 days, today + 400 days].
-  bool load(const Manifest& manifest, int32_t today);
+  bool load(const Config& config, int32_t today);
 
   const ics::Calendar& calendar() const { return cal; }
   int daysAhead() const { return daysAhead_; }
@@ -85,7 +67,7 @@ class CalendarData {
   ics::Calendar cal;
   std::vector<std::string> paths;
   std::string tasksPath;
-  Manifest manifestCopy;
+  Config configCopy;
   int32_t today_ = 0;
   int daysAhead_ = 30;
   int autoSyncHours_ = 0;
@@ -95,4 +77,4 @@ class CalendarData {
   std::unique_ptr<char[]> readBuf;
 };
 
-}  // namespace plugins::calendar
+}  // namespace calendar

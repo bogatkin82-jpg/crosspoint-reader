@@ -11,7 +11,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
 namespace {
 constexpr StrId WEEKDAY[] = {StrId::STR_CAL_WD_1, StrId::STR_CAL_WD_2, StrId::STR_CAL_WD_3, StrId::STR_CAL_WD_4,
@@ -207,4 +207,4 @@ void CalendarMonthActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-}  // namespace plugins::calendar
+}  // namespace calendar

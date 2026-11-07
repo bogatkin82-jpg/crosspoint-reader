@@ -15,8 +15,8 @@ void silentRestartToSettings();  // settings screen
 // no-op on touch boards (a soft reset would cycle their externally-powered
 // rails); the caller then proceeds without a reboot.
 void silentRestartToJoinNetwork();
-// Reopens the calendar in `pluginDir` (/plugins/<folder>) after the reboot.
-void silentRestartToCalendar(const char* pluginDir);
+// Reopens the calendar after the reboot.
+void silentRestartToCalendar();
 
 // Reboots immediately after an activity releases exclusive raw storage. The
 // RTC target ensures setup() lands on Home instead of resuming a reader.

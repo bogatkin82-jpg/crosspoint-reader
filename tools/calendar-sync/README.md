@@ -12,9 +12,9 @@ bash uninstall.sh
 
 Settings: `~/.config/crosspoint-cal-sync.conf` (`ICS_URL`, `BOOK_HOST`,
 `BOOK_PATH`, `MIN_DOWNLOAD_INTERVAL`). The file is uploaded to
-`/plugins/calendar/calendar-full.ics` by default; change `BOOK_PATH` for another name.
+`/calendar/calendar-full.ics` by default; change `BOOK_PATH` for another name.
 
-Combine with a busy-only feed the reader can sync on its own (plugin.json
+Combine with a busy-only feed the reader can sync on its own (calendar.json
 `"url"`, saved to a different `"file"`): the agenda lists each meeting once and
 uses the title from the pushed file when there is one.
 

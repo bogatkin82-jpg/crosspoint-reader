@@ -46,7 +46,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
-#include "plugins/PluginRegistry.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
@@ -201,33 +200,25 @@ void silentRestartToJoinNetwork() {
   ESP.restart();
 }
 
-void silentRestartToCalendar(const char* pluginDir) {
+void silentRestartToCalendar() {
   if (deepSleepInProgress) return;
 #if FREEINK_CAP_TOUCH
   // A software reset would cycle touch/frontlight rails; the calendar reloads
   // in place instead.
   if (BoardConfig::hasTouch()) return;
 #endif
-  if (!pluginDir || !Storage.writeFile(CALENDAR_RESUME_PATH, String(pluginDir))) {
+  if (!Storage.writeFile(CALENDAR_RESUME_PATH, String("1"))) {
     silentRestart();
     return;
   }
   silentRestartTo(SILENT_REBOOT_TARGET_CALENDAR, "calendar");
 }
 
-// Opens the calendar recorded by silentRestartToCalendar(); false falls back to home.
+// Reopens the calendar after the sync reboot; false falls back to home.
 static bool resumeCalendarAfterSilentRestart() {
   if (!Storage.exists(CALENDAR_RESUME_PATH)) return false;
-  const String dir = Storage.readFile(CALENDAR_RESUME_PATH);
   Storage.remove(CALENDAR_RESUME_PATH);
-  plugins::Manifest manifest;
-  if (dir.length() == 0 || !plugins::loadManifest(dir.c_str(), manifest) || !manifest.enabled) return false;
-  const plugins::Runtime* runtime = plugins::findRuntime(manifest.runtime);
-  if (!runtime) return false;
-  auto activity = runtime->create(renderer, mappedInputManager, manifest);
-  if (!activity) return false;
-  activityManager.replaceActivity(std::move(activity));
-  return true;
+  return activityManager.goToCalendar();
 }
 
 void restartToHomeAfterStorageHandoff() {

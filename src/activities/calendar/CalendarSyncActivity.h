@@ -3,23 +3,23 @@
 #include <string>
 #include <vector>
 
-#include "CalendarPlugin.h"
+#include "CalendarData.h"
 #include "activities/Activity.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
-// Downloads the plugin's internet calendars (iCal feeds) over Wi-Fi:
+// Downloads the configured internet calendars (iCal feeds) over Wi-Fi:
 // connects with saved credentials (or shows the network picker), syncs the
 // clock over NTP, streams each feed to "<file>.part", checks it is a
 // VCALENDAR (a login/HTML page is rejected and the old file kept) and swaps it
-// in. On exit, when this screen brought Wi-Fi up, the device silently restarts
-// back into the plugin to return the TLS/Wi-Fi heap (same as other Wi-Fi
+// in. On exit, after the sync ran, the device silently restarts
+// back into the calendar to return the TLS/Wi-Fi heap (same as other Wi-Fi
 // screens).
 class CalendarSyncActivity final : public Activity {
  public:
-  CalendarSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Manifest& manifest,
+  CalendarSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Config& config,
                        std::vector<Subscription> subscriptions)
-      : Activity("CalendarSync", renderer, mappedInput), manifest(manifest), subs(std::move(subscriptions)) {}
+      : Activity("CalendarSync", renderer, mappedInput), config(config), subs(std::move(subscriptions)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -34,7 +34,7 @@ class CalendarSyncActivity final : public Activity {
   void runSync();
   bool syncOne(const Subscription& s, std::string& error);
 
-  Manifest manifest;
+  Config config;
   std::vector<Subscription> subs;
   State state = State::WaitingWifi;
   bool tearDownWifi = false;
@@ -44,4 +44,4 @@ class CalendarSyncActivity final : public Activity {
   std::string errorText;
 };
 
-}  // namespace plugins::calendar
+}  // namespace calendar

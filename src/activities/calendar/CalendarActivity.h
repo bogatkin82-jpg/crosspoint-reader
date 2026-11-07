@@ -6,19 +6,19 @@
 
 #include <I18n.h>
 
-#include "CalendarPlugin.h"
+#include "CalendarData.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
-namespace plugins::calendar {
+namespace calendar {
 
-// Calendar plugin main screen: "Events" tab (agenda grouped by day for the
+// Calendar main screen: "Events" tab (agenda grouped by day for the
 // configured period, with a period row that jumps by week/month or opens the
 // month grid) and "Tasks" tab (VTODO checklist; Confirm toggles completion,
 // long-press offers delete; new tasks are appended to the tasks .ics file).
 class CalendarActivity final : public UiTabListActivity {
  public:
-  CalendarActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Manifest& manifest);
+  CalendarActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Config& config);
 
   void onEnter() override;
   void onExit() override;
@@ -49,8 +49,7 @@ class CalendarActivity final : public UiTabListActivity {
   bool handleButtons() override;
   bool handleCustomInput() override;
   const char* headerTitle() const override {
-    const plugins::Runtime* runtime = plugins::findRuntime(manifest.runtime);
-    return runtime ? I18N.get(runtime->nameId) : manifest.name.c_str();
+    return config.name.empty() ? tr(STR_CAL_TITLE) : config.name.c_str();
   }
   void drawFooter() override;
 
@@ -72,7 +71,7 @@ class CalendarActivity final : public UiTabListActivity {
   void showMessage(const char* text);
   void setPeriodStart(int32_t day);
 
-  Manifest manifest;
+  Config config;
   std::unique_ptr<CalendarData> data;
   OptionPopup popup;
   Tab tab = Tab::Agenda;
@@ -99,4 +98,4 @@ std::string formatShortDate(int32_t day);
 std::string formatMonthTitle(int year, unsigned month);
 std::string formatTime(int16_t minute);
 
-}  // namespace plugins::calendar
+}  // namespace calendar
