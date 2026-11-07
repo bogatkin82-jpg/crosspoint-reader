@@ -330,7 +330,7 @@ void ActivityManager::goToPlugins(bool showOpds) {
 bool ActivityManager::goToCalendar() {
   calendar::Config config;
   switch (calendar::loadConfig(config)) {
-    case calendar::LoadResult::Storage:
+    case calendar::LoadResult::NoStorage:
       LOG_ERR("ACT", "Cannot create the calendar data folder");
       goToFullScreenMessage(tr(STR_CAL_ERR_STORAGE), EpdFontFamily::REGULAR, /*dismissible=*/true);
       return true;
@@ -341,7 +341,7 @@ bool ActivityManager::goToCalendar() {
     case calendar::LoadResult::Ok:
       break;
   }
-  auto activity = makeUniqueNoThrow<CalendarActivity>(renderer, mappedInput, config);
+  auto activity = makeUniqueNoThrow<calendar::CalendarActivity>(renderer, mappedInput, config);
   if (!activity) {
     LOG_ERR("ACT", "OOM: calendar activity");
     return false;

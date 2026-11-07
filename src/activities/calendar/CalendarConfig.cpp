@@ -148,7 +148,7 @@ bool parseConfig(const std::string& dir, Config& out) {
 
 LoadResult loadConfig(Config& out) {
   out = Config{};
-  if (!ensureDataDir(out.dir)) return LoadResult::Storage;
+  if (!ensureDataDir(out.dir)) return LoadResult::NoStorage;
   if (!parseConfig(out.dir, out)) return LoadResult::BadConfig;
   if (out.tasksFile.empty()) out.tasksFile = out.dir + "/tasks.ics";
   return LoadResult::Ok;

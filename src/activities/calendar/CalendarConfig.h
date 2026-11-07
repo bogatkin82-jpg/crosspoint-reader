@@ -41,7 +41,7 @@ struct Config {
 
 // Resolves the data folder (creating /calendar and seeding it on first use)
 // and parses calendar.json, falling back to the legacy plugin.json config.
-enum class LoadResult : uint8_t { Ok, Storage, BadConfig };
+enum class LoadResult : uint8_t { Ok, NoStorage, BadConfig };
 LoadResult loadConfig(Config& out);
 
 }  // namespace calendar
